@@ -7,6 +7,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -36,13 +37,22 @@ import androidx.compose.runtime.remember
 fun ArrayVisualizer(
     array: IntArray,
     step: SearchStep,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    interactiveMode: Boolean = false,
+    selectedMidIndex: Int = -1,
+    incorrectMidIndex: Int = -1,
+    onElementClick: ((Int) -> Unit)? = null
 ) {
     val listState = rememberLazyListState()
 
-    LaunchedEffect(step.mid) {
-        if (step.mid != -1) {
-            listState.animateScrollToItem(step.mid)
+    LaunchedEffect(step.mid, selectedMidIndex, step.low, step.high, interactiveMode) {
+        val targetScrollIndex = if (interactiveMode) {
+            if (selectedMidIndex != -1) selectedMidIndex else (step.low + step.high) / 2
+        } else {
+            if (step.mid != -1) step.mid else -1
+        }
+        if (targetScrollIndex != -1) {
+            listState.animateScrollToItem(targetScrollIndex)
         }
     }
 
@@ -59,11 +69,15 @@ fun ArrayVisualizer(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 // Pointer labels (L, H, M)
-                val pointerText = remember(step.low, step.high, step.mid) {
+                val pointerText = remember(step.low, step.high, step.mid, selectedMidIndex, interactiveMode) {
                     val labels = mutableListOf<String>()
                     if (index == step.low) labels.add("L")
                     if (index == step.high) labels.add("H")
-                    if (index == step.mid) labels.add("M")
+                    if (interactiveMode) {
+                        if (index == selectedMidIndex) labels.add("M")
+                    } else {
+                        if (index == step.mid) labels.add("M")
+                    }
                     labels.joinToString(",")
                 }
 
@@ -72,7 +86,8 @@ fun ArrayVisualizer(
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = when {
-                        index == step.mid -> HighlightPrimary
+                        interactiveMode && index == selectedMidIndex -> HighlightPrimary
+                        !interactiveMode && index == step.mid -> HighlightPrimary
                         index == step.low || index == step.high -> MaterialTheme.colorScheme.primary
                         else -> Color.Transparent
                     },
@@ -81,9 +96,17 @@ fun ArrayVisualizer(
 
                 ArrayElement(
                     value = value,
-                    isMid = index == step.mid,
+                    isMid = if (interactiveMode) index == selectedMidIndex else index == step.mid,
                     isEliminated = index < step.low || (step.high != -1 && index > step.high),
-                    isFound = index == step.mid && step.result == StepResult.FOUND
+                    isFound = if (interactiveMode) {
+                        index == selectedMidIndex && step.result == StepResult.FOUND
+                    } else {
+                        index == step.mid && step.result == StepResult.FOUND
+                    },
+                    isIncorrect = interactiveMode && index == incorrectMidIndex,
+                    onClick = if (interactiveMode && index >= step.low && index <= step.high && onElementClick != null) {
+                        { onElementClick(index) }
+                    } else null
                 )
 
                 // Index indicator
@@ -102,11 +125,14 @@ fun ArrayElement(
     value: Int,
     isMid: Boolean,
     isEliminated: Boolean,
-    isFound: Boolean
+    isFound: Boolean,
+    isIncorrect: Boolean = false,
+    onClick: (() -> Unit)? = null
 ) {
     val backgroundColor by animateColorAsState(
         targetValue = when {
             isFound -> CorrectGreen
+            isIncorrect -> MaterialTheme.colorScheme.errorContainer
             isMid -> HighlightPrimary
             isEliminated -> EliminatedGray
             else -> MaterialTheme.colorScheme.surfaceVariant
@@ -129,14 +155,25 @@ fun ArrayElement(
             .size(60.dp)
             .scale(scale)
             .background(backgroundColor, RoundedCornerShape(8.dp))
-            .border(2.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp)),
+            .border(
+                2.dp,
+                if (isIncorrect) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+                RoundedCornerShape(8.dp)
+            )
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(onClick = onClick)
+                } else {
+                    Modifier
+                }
+            ),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = value.toString(),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            color = if (isEliminated) Color.DarkGray else Color.Unspecified
+            color = if (isEliminated) Color.DarkGray else if (isIncorrect) MaterialTheme.colorScheme.onErrorContainer else Color.Unspecified
         )
     }
 }

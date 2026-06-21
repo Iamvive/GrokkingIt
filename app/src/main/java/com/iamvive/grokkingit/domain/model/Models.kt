@@ -20,3 +20,12 @@ data class Chapter(
     val topics: List<String>,
     val isCompleted: Boolean = false
 )
+
+enum class InteractiveStage {
+    SELECT_MID, CHOOSE_DIRECTION, FEEDBACK, FINISHED
+}
+
+enum class VisualizerMode {
+    VISUALIZER, INTERACTIVE
+}
+
